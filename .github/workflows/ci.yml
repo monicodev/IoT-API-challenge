@@ -89,7 +89,9 @@ jobs:
           sleep 5
 
       - name: Run database migrations
-        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/iot_telemetry_test
+        run: alembic upgrade head --verbose
 
       - name: Run tests with coverage
         env:

@@ -122,10 +122,7 @@ async def run_async_migrations_with_retry(
 
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
-    url = config.get_main_option("sqlalchemy.url")
-
-    if not url or "driver://" in url or "localhost" in url and "your" in url:
-        url = get_database_url_from_env()
+    url = get_database_url_from_env()
 
     safe_url = url.replace("://", "://***:***@") if "@" in url else url
     print(f"[alembic] Using database URL: {safe_url}")
