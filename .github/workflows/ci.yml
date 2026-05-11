@@ -86,6 +86,10 @@ jobs:
             pg_isready -h localhost -U postgres && break
             sleep 1
           done
+          sleep 5
+
+      - name: Run database migrations
+        run: alembic upgrade head
 
       - name: Run tests with coverage
         env:
