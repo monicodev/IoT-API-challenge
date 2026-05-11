@@ -27,7 +27,9 @@ async def warm_up_api():
 
     for attempt in range(max_retries):
         try:
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 response = await client.get("/health", timeout=5.0)
                 if response.status_code == 200:
                     return
