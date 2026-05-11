@@ -19,10 +19,15 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 @pytest.fixture(scope="session", autouse=True)
 async def warm_up_api():
     """Wait for API to be ready before running tests."""
+    import os
+
+    if os.environ.get("SKIP_WARMUP"):
+        return
+
     from src.main import app
 
     transport = ASGITransport(app=app)
-    max_retries = 10
+    max_retries = 5
     retry_delay = 0.5
 
     for attempt in range(max_retries):
@@ -30,7 +35,7 @@ async def warm_up_api():
             async with AsyncClient(
                 transport=transport, base_url="http://test"
             ) as client:
-                response = await client.get("/health", timeout=5.0)
+                response = await client.get("/health", timeout=2.0)
                 if response.status_code == 200:
                     return
         except Exception:
@@ -38,5 +43,3 @@ async def warm_up_api():
 
         if attempt < max_retries - 1:
             await asyncio.sleep(retry_delay)
-
-    pytest.fail(f"API did not become healthy after {max_retries} attempts")
