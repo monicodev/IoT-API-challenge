@@ -1,22 +1,23 @@
 """Events API route - handles telemetry event ingestion."""
-from typing import List, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.database import get_db
 from src.api.schemas.events import (
     EventCreate,
     EventInsertResponse,
 )
+from src.models.database import get_db
 from src.services.event_service import EventService
 
 router = APIRouter(prefix="/events", tags=["events"])
 
 
-@router.post("", response_model=EventInsertResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=EventInsertResponse, status_code=status.HTTP_201_CREATED
+)
 async def ingest_event(
-    event_data: Union[EventCreate, List[EventCreate]],
+    event_data: EventCreate | list[EventCreate],
     session: AsyncSession = Depends(get_db),
 ) -> EventInsertResponse:
     """
@@ -25,10 +26,7 @@ async def ingest_event(
     Accepts either a single event or a list of events (up to 1000).
     Idempotent: duplicate (device_id, timestamp, metric) will be ignored.
     """
-    if isinstance(event_data, list):
-        events = event_data
-    else:
-        events = [event_data]
+    events = event_data if isinstance(event_data, list) else [event_data]
 
     if len(events) > 1000:
         raise HTTPException(

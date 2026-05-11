@@ -1,12 +1,11 @@
 """Aggregation service - handles time-based aggregations."""
+
 from datetime import datetime
-from typing import List, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.aggregate import AggregationType, IntervalType
-
 
 AGG_WHITELIST: dict[AggregationType, str] = {
     AggregationType.AVG: "AVG",
@@ -29,7 +28,7 @@ class AggregationService:
         to: datetime,
         interval: IntervalType,
         aggregation: AggregationType,
-    ) -> List[Tuple[datetime, float]]:
+    ) -> list[tuple[datetime, float]]:
         """
         Get aggregated telemetry data using PostgreSQL date_trunc.
 
@@ -39,10 +38,13 @@ class AggregationService:
         agg_func = AGG_WHITELIST[aggregation]
 
         if interval == IntervalType.FIVE_MINUTES:
-            sql = text("""
+            sql = text(
+                """
                 SELECT
                     bucket,
-                    """ + agg_func + """(value) AS value
+                    """
+                + agg_func
+                + """(value) AS value
                 FROM (
                     SELECT
                         date_trunc('minute', timestamp) -
@@ -56,12 +58,16 @@ class AggregationService:
                 ) AS bucketed
                 GROUP BY bucket
                 ORDER BY bucket
-            """)
+            """
+            )
         elif interval == IntervalType.MINUTE:
-            sql = text("""
+            sql = text(
+                """
                 SELECT
                     date_trunc('minute', timestamp) AS bucket,
-                    """ + agg_func + """(value) AS value
+                    """
+                + agg_func
+                + """(value) AS value
                 FROM telemetry_events
                 WHERE device_id = :device_id
                     AND metric = :metric
@@ -69,12 +75,16 @@ class AggregationService:
                     AND timestamp < :to_time
                 GROUP BY date_trunc('minute', timestamp)
                 ORDER BY bucket
-            """)
+            """
+            )
         elif interval == IntervalType.HOUR:
-            sql = text("""
+            sql = text(
+                """
                 SELECT
                     date_trunc('hour', timestamp) AS bucket,
-                    """ + agg_func + """(value) AS value
+                    """
+                + agg_func
+                + """(value) AS value
                 FROM telemetry_events
                 WHERE device_id = :device_id
                     AND metric = :metric
@@ -82,12 +92,16 @@ class AggregationService:
                     AND timestamp < :to_time
                 GROUP BY date_trunc('hour', timestamp)
                 ORDER BY bucket
-            """)
+            """
+            )
         elif interval == IntervalType.DAY:
-            sql = text("""
+            sql = text(
+                """
                 SELECT
                     date_trunc('day', timestamp) AS bucket,
-                    """ + agg_func + """(value) AS value
+                    """
+                + agg_func
+                + """(value) AS value
                 FROM telemetry_events
                 WHERE device_id = :device_id
                     AND metric = :metric
@@ -95,12 +109,16 @@ class AggregationService:
                     AND timestamp < :to_time
                 GROUP BY date_trunc('day', timestamp)
                 ORDER BY bucket
-            """)
+            """
+            )
         else:
-            sql = text("""
+            sql = text(
+                """
                 SELECT
                     date_trunc('hour', timestamp) AS bucket,
-                    """ + agg_func + """(value) AS value
+                    """
+                + agg_func
+                + """(value) AS value
                 FROM telemetry_events
                 WHERE device_id = :device_id
                     AND metric = :metric
@@ -108,7 +126,8 @@ class AggregationService:
                     AND timestamp < :to_time
                 GROUP BY date_trunc('hour', timestamp)
                 ORDER BY bucket
-            """)
+            """
+            )
 
         result = await session.execute(
             sql,
@@ -117,7 +136,7 @@ class AggregationService:
                 "metric": metric,
                 "from_time": from_time,
                 "to_time": to,
-            }
+            },
         )
 
         rows = result.fetchall()

@@ -1,13 +1,12 @@
 """TelemetryEvent SQLAlchemy model."""
+
 from datetime import datetime
-from typing import Optional
-from uuid import UUID
 
 from sqlalchemy import (
-    Index,
     DateTime,
-    String,
+    Index,
     Numeric,
+    String,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,6 +21,7 @@ class TelemetryEvent(Base, UUIDMixin, TimestampMixin):
     Idempotency is guaranteed via unique constraint on
     (device_id, timestamp, metric).
     """
+
     __tablename__ = "telemetry_events"
 
     device_id: Mapped[str] = mapped_column(
@@ -46,10 +46,7 @@ class TelemetryEvent(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         # Unique constraint for idempotency - critical for no-duplicate inserts
         UniqueConstraint(
-            "device_id",
-            "timestamp",
-            "metric",
-            name="uq_events_device_timestamp_metric"
+            "device_id", "timestamp", "metric", name="uq_events_device_timestamp_metric"
         ),
         # Index for aggregation queries: device_id + timestamp (descending)
         Index(

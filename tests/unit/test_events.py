@@ -1,7 +1,9 @@
 """Unit tests for event endpoints and service."""
-import pytest
+
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.api.schemas.events import EventCreate, EventInsertResponse
 from src.services.event_service import EventService
@@ -160,7 +162,9 @@ class TestEventService:
             ),
         ]
 
-        inserted, duplicates = await EventService.insert_events_batch(mock_session, events)
+        inserted, duplicates = await EventService.insert_events_batch(
+            mock_session, events
+        )
 
         assert inserted == 2
         assert duplicates == 0
@@ -198,7 +202,9 @@ class TestEventService:
             ),
         ]
 
-        inserted, duplicates = await EventService.insert_events_batch(mock_session, events)
+        inserted, duplicates = await EventService.insert_events_batch(
+            mock_session, events
+        )
 
         assert inserted == 2
         assert duplicates == 1
@@ -226,7 +232,9 @@ class TestEventService:
             ),
         ]
 
-        inserted, duplicates = await EventService.insert_events_batch(mock_session, events)
+        inserted, duplicates = await EventService.insert_events_batch(
+            mock_session, events
+        )
 
         assert inserted == 0
         assert duplicates == 2

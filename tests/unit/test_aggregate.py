@@ -1,13 +1,15 @@
 """Unit tests for aggregate endpoints and service."""
-import pytest
+
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from src.api.schemas.aggregate import (
+    AggregateDataPoint,
+    AggregateResponse,
     AggregationType,
     IntervalType,
-    AggregateResponse,
-    AggregateDataPoint,
 )
 from src.services.aggregation_service import AggregationService
 
@@ -217,8 +219,12 @@ class TestAggregateResponse:
             interval="1h",
             aggregation="avg",
             data=[
-                AggregateDataPoint(timestamp=datetime(2026, 1, 15, 10, 0, 0), value=23.5),
-                AggregateDataPoint(timestamp=datetime(2026, 1, 15, 11, 0, 0), value=24.1),
+                AggregateDataPoint(
+                    timestamp=datetime(2026, 1, 15, 10, 0, 0), value=23.5
+                ),
+                AggregateDataPoint(
+                    timestamp=datetime(2026, 1, 15, 11, 0, 0), value=24.1
+                ),
             ],
         )
 

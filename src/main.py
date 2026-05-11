@@ -1,14 +1,24 @@
 """FastAPI application entry point."""
+
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from importlib.metadata import version
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.routes import aggregate, devices, events, health
 from src.models.database import engine
-from src.api.routes import events, aggregate, devices, health
+
+APP_NAME = "iot-telemetry-api"
+try:
+    APP_VERSION = version(APP_NAME)
+except Exception:  # noqa: PERF203
+    APP_VERSION = "1.0.0"
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown."""
     yield
     await engine.dispose()
@@ -17,7 +27,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="IoT Telemetry API",
     description="High-performance API for IoT event ingestion and aggregation",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -36,10 +46,10 @@ app.include_router(devices.router)
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint with API info."""
     return {
-        "name": "IoT Telemetry API",
-        "version": "1.0.0",
+        "name": APP_NAME,
+        "version": APP_VERSION,
         "docs": "/docs",
     }

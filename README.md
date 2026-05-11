@@ -61,19 +61,45 @@ docker-compose up --build
 
 # The API will be available at http://localhost:8000
 # API docs at http://localhost:8000/docs
+
+# Database is exposed on port 5433 (5432 inside container)
+# Connect with: postgresql://ubuntu:@localhost:5433/iot_telemetry
 ```
 
 ### Running Locally
 
 ```bash
+# Activate virtual environment
+source venv/bin/activate
+
 # Install dependencies
 pip install -r requirements.txt
 
-# Run migrations
+# Run database migrations
 alembic upgrade head
 
 # Start the API
 uvicorn src.main:app --reload
+
+# Run in background
+uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+```
+
+### Development Commands
+
+```bash
+# Linting with ruff
+ruff check .
+ruff format .
+
+# Type checking with mypy
+mypy src
+
+# Run all tests
+pytest tests/ -v --cov=src
+
+# Run with coverage report
+pytest --cov=src --cov-report=term-missing
 ```
 
 ## API Endpoints
@@ -92,18 +118,15 @@ curl -X POST http://localhost:8000/events \
   }'
 ```
 
-### POST /events/batch
-Ingest multiple events (up to 1000):
+Or send multiple events in a single request (up to 1000):
 
 ```bash
-curl -X POST http://localhost:8000/events/batch \
+curl -X POST http://localhost:8000/events \
   -H "Content-Type: application/json" \
-  -d '{
-    "events": [
-      {"device_id": "device-001", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5},
-      {"device_id": "device-001", "timestamp": "2026-01-15T10:31:00Z", "metric": "temperature", "value": 23.7}
-    ]
-  }'
+  -d '[
+    {"device_id": "device-001", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5},
+    {"device_id": "device-001", "timestamp": "2026-01-15T10:31:00Z", "metric": "temperature", "value": 23.7}
+  ]'
 ```
 
 ### GET /aggregate
@@ -138,12 +161,45 @@ pytest tests/unit/ -v
 ### Integration Tests (with real PostgreSQL)
 
 ```bash
-# Start PostgreSQL for integration tests
+# Start PostgreSQL for integration tests on port 5433
 docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres postgres:15-alpine
 
 # Run integration tests
-pytest tests/integration/ -v --db-url postgresql+asyncpg://postgres:postgres@localhost:5433/iot_telemetry_test
+pytest tests/integration/ -v
 ```
+
+### Port Configuration
+
+The docker-compose.yml exposes the database on **port 5433** (host) to avoid conflicts with local PostgreSQL installations. The API runs on port **8000**.
+
+To connect to the database from your host:
+```bash
+postgresql://ubuntu:@localhost:5433/iot_telemetry
+```
+
+### Troubleshooting
+
+**Port 5432 already in use?**
+```bash
+# Find what's using port 5432
+sudo lsof -i :5432
+
+# Kill the process if it's a local PostgreSQL
+sudo pkill -f postgres
+```
+
+**Database connection refused?**
+```bash
+# Check if Docker containers are running
+docker-compose ps
+
+# View logs
+docker-compose logs postgres
+docker-compose logs api
+```
+
+**Mypy errors with SQLAlchemy?**
+Some mypy errors for SQLAlchemy async are expected due to missing type stubs. These are ignored with `# type: ignore` where necessary. The core business logic types are fully annotated.
 
 ### Run All Tests
 

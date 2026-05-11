@@ -1,12 +1,12 @@
 """Event service - handles telemetry event ingestion."""
+
 from datetime import datetime
-from typing import List, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.event import TelemetryEvent
 from src.api.schemas.events import EventCreate
+from src.models.event import TelemetryEvent
 
 
 class EventService:
@@ -16,7 +16,7 @@ class EventService:
     async def insert_event(
         session: AsyncSession,
         event: EventCreate,
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Insert a single telemetry event.
 
@@ -25,14 +25,17 @@ class EventService:
         """
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        stmt = pg_insert(TelemetryEvent).values(
-            device_id=event.device_id,
-            timestamp=event.timestamp,
-            metric=event.metric,
-            value=event.value,
-        ).on_conflict_do_nothing(
-            constraint="uq_events_device_timestamp_metric"
-        ).returning(TelemetryEvent.id)
+        stmt = (
+            pg_insert(TelemetryEvent)
+            .values(
+                device_id=event.device_id,
+                timestamp=event.timestamp,
+                metric=event.metric,
+                value=event.value,
+            )
+            .on_conflict_do_nothing(constraint="uq_events_device_timestamp_metric")
+            .returning(TelemetryEvent.id)
+        )
 
         result = await session.execute(stmt)
         inserted = len(result.all())
@@ -43,8 +46,8 @@ class EventService:
     @staticmethod
     async def insert_events_batch(
         session: AsyncSession,
-        events: List[EventCreate],
-    ) -> Tuple[int, int]:
+        events: list[EventCreate],
+    ) -> tuple[int, int]:
         """
         Insert multiple telemetry events in batch.
 
@@ -56,7 +59,7 @@ class EventService:
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        values: List[dict[str, object]] = [
+        values: list[dict[str, object]] = [
             {
                 "device_id": e.device_id,
                 "timestamp": e.timestamp,
@@ -66,9 +69,12 @@ class EventService:
             for e in events
         ]
 
-        stmt = pg_insert(TelemetryEvent).values(values).on_conflict_do_nothing(
-            constraint="uq_events_device_timestamp_metric"
-        ).returning(TelemetryEvent.id)
+        stmt = (
+            pg_insert(TelemetryEvent)
+            .values(values)
+            .on_conflict_do_nothing(constraint="uq_events_device_timestamp_metric")
+            .returning(TelemetryEvent.id)
+        )
 
         result = await session.execute(stmt)
         inserted = len(result.all())
@@ -85,7 +91,9 @@ class EventService:
     ) -> int:
         """Count events for a device within a time range."""
         result = await session.execute(
-            select(func.count()).select_from(TelemetryEvent).where(
+            select(func.count())
+            .select_from(TelemetryEvent)
+            .where(
                 TelemetryEvent.device_id == device_id,
                 TelemetryEvent.timestamp >= from_time,
                 TelemetryEvent.timestamp <= to,

@@ -1,20 +1,23 @@
 """Aggregate API route - handles time-based aggregations."""
+
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.database import get_db
 from src.api.schemas.aggregate import (
-    AggregateResponse,
     AggregateDataPoint,
+    AggregateResponse,
     AggregationType,
     IntervalType,
 )
+from src.models.database import get_db
 from src.services.aggregation_service import AggregationService
 
 router = APIRouter(prefix="/aggregate", tags=["aggregate"])
+
+DEFAULT_INTERVAL: IntervalType = IntervalType.HOUR
+DEFAULT_AGGREGATION: AggregationType = AggregationType.AVG
 
 
 @router.get("", response_model=AggregateResponse)
@@ -23,8 +26,12 @@ async def get_aggregation(
     metric: str = Query(..., description="Metric name"),
     from_time: datetime = Query(..., alias="from", description="Start timestamp"),
     to: datetime = Query(..., description="End timestamp"),
-    interval: IntervalType = Query(IntervalType.HOUR, description="Aggregation interval"),
-    aggregation: AggregationType = Query(AggregationType.AVG, description="Aggregation function"),
+    interval: IntervalType = Query(
+        DEFAULT_INTERVAL, description="Aggregation interval"
+    ),
+    aggregation: AggregationType = Query(
+        DEFAULT_AGGREGATION, description="Aggregation function"
+    ),
     session: AsyncSession = Depends(get_db),
 ) -> AggregateResponse:
     """
@@ -60,7 +67,6 @@ async def get_aggregation(
         interval=interval.value,
         aggregation=aggregation.value,
         data=[
-            AggregateDataPoint(timestamp=ts, value=value)
-            for ts, value in data_points
+            AggregateDataPoint(timestamp=ts, value=value) for ts, value in data_points
         ],
     )

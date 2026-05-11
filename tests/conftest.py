@@ -1,7 +1,9 @@
 """Pytest configuration and shared fixtures."""
-import pytest
+
 import asyncio
-from typing import Generator
+from collections.abc import Generator
+
+import pytest
 
 
 @pytest.fixture(scope="session")

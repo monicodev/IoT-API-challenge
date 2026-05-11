@@ -1,6 +1,8 @@
 """Unit tests for health endpoint."""
+
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from src.api.routes.health import health_check
 
@@ -11,7 +13,7 @@ class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check_database_connected(self):
         """Test health check when database is connected."""
-        with patch('src.api.routes.health.check_database_connection') as mock_check:
+        with patch("src.api.routes.health.check_database_connection") as mock_check:
             mock_check.return_value = (True, "")
 
             response = await health_check()
@@ -25,7 +27,7 @@ class TestHealthCheck:
         CRITICAL: This verifies the health endpoint properly returns 503
         when the database is not reachable.
         """
-        with patch('src.api.routes.health.check_database_connection') as mock_check:
+        with patch("src.api.routes.health.check_database_connection") as mock_check:
             mock_check.return_value = (False, "connection refused")
 
             response = await health_check()
@@ -35,7 +37,7 @@ class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check_database_timeout(self):
         """Test health check with database timeout."""
-        with patch('src.api.routes.health.check_database_connection') as mock_check:
+        with patch("src.api.routes.health.check_database_connection") as mock_check:
             mock_check.return_value = (False, "connection timeout")
 
             response = await health_check()
@@ -45,7 +47,7 @@ class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check_database_error(self):
         """Test health check with database error."""
-        with patch('src.api.routes.health.check_database_connection') as mock_check:
+        with patch("src.api.routes.health.check_database_connection") as mock_check:
             mock_check.return_value = (False, "invalid catalog name")
 
             response = await health_check()
@@ -55,7 +57,7 @@ class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check_any_db_failure_returns_503(self):
         """Verify any DB failure returns 503 status."""
-        with patch('src.api.routes.health.check_database_connection') as mock_check:
+        with patch("src.api.routes.health.check_database_connection") as mock_check:
             mock_check.return_value = (False, "any error message")
 
             response = await health_check()

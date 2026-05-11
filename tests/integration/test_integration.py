@@ -1,18 +1,18 @@
 """Integration tests using real PostgreSQL database."""
+
 import os
-import pytest
-import asyncio
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import asyncpg
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
-from httpx import AsyncClient, ASGITransport
 
+from src.main import app
 from src.models.base import Base
 from src.models.event import TelemetryEvent
-from src.main import app
 
 
 def _get_connection_params() -> tuple[str, dict]:
@@ -32,7 +32,12 @@ def _get_connection_params() -> tuple[str, dict]:
                 host = host_port
                 port = "5432"
             test_db_url = f"{proto}://{auth}@{host_port}/{path_part.rsplit('/', 1)[0]}{db_name_suffix}"
-            return test_db_url, {"host": host, "port": int(port), "user": user, "password": password}
+            return test_db_url, {
+                "host": host,
+                "port": int(port),
+                "user": user,
+                "password": password,
+            }
 
     host = os.environ.get("POSTGRES_HOST", "localhost")
     port = os.environ.get("POSTGRES_PORT", "5433")
@@ -54,7 +59,7 @@ async def setup_database():
         conn = await asyncpg.connect(database="postgres", **pg_params)
         db_name = test_db_url.rsplit("/", 1)[-1]
         try:
-            await conn.execute(f'CREATE DATABASE {db_name}')
+            await conn.execute(f"CREATE DATABASE {db_name}")
         except asyncpg.exceptions.DuplicateDatabaseError:
             pass
         finally:
@@ -126,7 +131,9 @@ class TestEventsIntegration:
     """Integration tests for events endpoint."""
 
     @pytest.mark.asyncio
-    async def test_ingest_single_event(self, client: AsyncClient, db_session: AsyncSession):
+    async def test_ingest_single_event(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
         """Test ingesting a single event."""
         event_data = {
             "device_id": "device-001",
@@ -143,6 +150,7 @@ class TestEventsIntegration:
         assert data["duplicates"] == 0
 
         from sqlalchemy import select
+
         result = await db_session.execute(
             select(TelemetryEvent).where(
                 TelemetryEvent.device_id == "device-001",
@@ -157,9 +165,24 @@ class TestEventsIntegration:
     async def test_ingest_batch_events(self, client: AsyncClient):
         """Test ingesting batch events via unified /events endpoint."""
         events_data = [
-            {"device_id": "device-002", "timestamp": "2026-01-15T10:30:00Z", "metric": "humidity", "value": 65.0},
-            {"device_id": "device-002", "timestamp": "2026-01-15T10:31:00Z", "metric": "humidity", "value": 66.0},
-            {"device_id": "device-002", "timestamp": "2026-01-15T10:32:00Z", "metric": "humidity", "value": 67.0},
+            {
+                "device_id": "device-002",
+                "timestamp": "2026-01-15T10:30:00Z",
+                "metric": "humidity",
+                "value": 65.0,
+            },
+            {
+                "device_id": "device-002",
+                "timestamp": "2026-01-15T10:31:00Z",
+                "metric": "humidity",
+                "value": 66.0,
+            },
+            {
+                "device_id": "device-002",
+                "timestamp": "2026-01-15T10:32:00Z",
+                "metric": "humidity",
+                "value": 67.0,
+            },
         ]
 
         response = await client.post("/events", json=events_data)
@@ -193,7 +216,12 @@ class TestEventsIntegration:
     async def test_batch_size_validation(self, client: AsyncClient):
         """Test batch size validation - max 1000 events via unified endpoint."""
         events_data = [
-            {"device_id": f"device-{i}", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5}
+            {
+                "device_id": f"device-{i}",
+                "timestamp": "2026-01-15T10:30:00Z",
+                "metric": "temperature",
+                "value": 23.5,
+            }
             for i in range(1001)
         ]
 
@@ -210,10 +238,30 @@ class TestAggregateIntegration:
     async def test_aggregate_hourly_avg(self, client: AsyncClient):
         """Test hourly aggregation with avg using UTC datetimes."""
         events = [
-            {"device_id": "device-100", "timestamp": "2026-01-15T10:15:00Z", "metric": "temperature", "value": 20.0},
-            {"device_id": "device-100", "timestamp": "2026-01-15T10:45:00Z", "metric": "temperature", "value": 30.0},
-            {"device_id": "device-100", "timestamp": "2026-01-15T11:15:00Z", "metric": "temperature", "value": 25.0},
-            {"device_id": "device-100", "timestamp": "2026-01-15T11:45:00Z", "metric": "temperature", "value": 35.0},
+            {
+                "device_id": "device-100",
+                "timestamp": "2026-01-15T10:15:00Z",
+                "metric": "temperature",
+                "value": 20.0,
+            },
+            {
+                "device_id": "device-100",
+                "timestamp": "2026-01-15T10:45:00Z",
+                "metric": "temperature",
+                "value": 30.0,
+            },
+            {
+                "device_id": "device-100",
+                "timestamp": "2026-01-15T11:15:00Z",
+                "metric": "temperature",
+                "value": 25.0,
+            },
+            {
+                "device_id": "device-100",
+                "timestamp": "2026-01-15T11:45:00Z",
+                "metric": "temperature",
+                "value": 35.0,
+            },
         ]
         await client.post("/events", json=events)
 
@@ -263,8 +311,18 @@ class TestDevicesIntegration:
     async def test_list_devices(self, client: AsyncClient):
         """Test listing devices."""
         events = [
-            {"device_id": "device-200", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5},
-            {"device_id": "device-201", "timestamp": "2026-01-15T10:31:00Z", "metric": "temperature", "value": 24.0},
+            {
+                "device_id": "device-200",
+                "timestamp": "2026-01-15T10:30:00Z",
+                "metric": "temperature",
+                "value": 23.5,
+            },
+            {
+                "device_id": "device-201",
+                "timestamp": "2026-01-15T10:31:00Z",
+                "metric": "temperature",
+                "value": 24.0,
+            },
         ]
         await client.post("/events", json=events)
 

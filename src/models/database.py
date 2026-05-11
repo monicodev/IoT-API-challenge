@@ -1,32 +1,29 @@
 """Database configuration and session management."""
-from typing import AsyncGenerator
 
+from collections.abc import AsyncGenerator
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
-    AsyncSession,
     AsyncEngine,
+    AsyncSession,
     create_async_engine,
 )
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
-
 
 class Settings(BaseSettings):
     """Application settings from environment variables."""
 
-    postgres_host: str = "localhost"
-    postgres_port: int = 5432
-    postgres_user: str = "ubuntu"
-    postgres_password: str = ""
-    postgres_db: str = "iot_telemetry"
+    postgres_host: str = Field(default="localhost")
+    postgres_port: int = Field(default=5432)
+    postgres_user: str = Field(default="ubuntu")
+    postgres_password: str = Field(default="")
+    postgres_db: str = Field(default="iot_telemetry")
 
-    model_config = ConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-    )
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def get_database_url(self) -> str:
         """Build database URL from settings."""
@@ -48,7 +45,7 @@ engine: AsyncEngine = create_async_engine(
 )
 
 # Async session factory
-async_session_factory = sessionmaker(
+async_session_factory = sessionmaker(  # type: ignore[call-overload]
     engine,
     class_=AsyncSession,
     expire_on_commit=False,

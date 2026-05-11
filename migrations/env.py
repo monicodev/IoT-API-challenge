@@ -1,22 +1,20 @@
 """Alembic environment configuration."""
+
 import asyncio
 import os
+import sys
 from logging.config import fileConfig
-from typing import Optional
+from pathlib import Path
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
-import sys
-from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models.base import Base
-from src.models.event import TelemetryEvent
 
 config = context.config
 
@@ -69,11 +67,13 @@ async def run_async_migrations_with_retry(
     retry_delay: float = 1.0,
 ) -> None:
     """Run migrations with retry logic for connection resilience."""
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(max_retries):
         try:
-            print(f"[alembic] Connecting to database (attempt {attempt + 1}/{max_retries})...")
+            print(
+                f"[alembic] Connecting to database (attempt {attempt + 1}/{max_retries})..."
+            )
 
             connectable = async_engine_from_config(
                 {"sqlalchemy.url": url},
@@ -110,7 +110,7 @@ async def run_async_migrations_with_retry(
             print(f"[alembic] Unexpected error: {type(e).__name__} - {e}")
 
         if attempt < max_retries - 1:
-            sleep_time = retry_delay * (2 ** attempt)
+            sleep_time = retry_delay * (2**attempt)
             print(f"[alembic] Retrying in {sleep_time:.1f}s...")
             await asyncio.sleep(sleep_time)
 
@@ -127,7 +127,7 @@ async def run_async_migrations() -> None:
     if not url or "driver://" in url or "localhost" in url and "your" in url:
         url = get_database_url_from_env()
 
-    safe_url = url.replace(f"://", "://***:***@") if "@" in url else url
+    safe_url = url.replace("://", "://***:***@") if "@" in url else url
     print(f"[alembic] Using database URL: {safe_url}")
 
     await run_async_migrations_with_retry(url)

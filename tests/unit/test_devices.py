@@ -1,7 +1,9 @@
 """Unit tests for devices endpoints and service."""
-import pytest
+
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.api.schemas.devices import DeviceInfo, DeviceListResponse
 from src.services.device_service import DeviceService
@@ -33,8 +35,14 @@ class TestDeviceListResponse:
         """Test device list response."""
         response = DeviceListResponse(
             devices=[
-                DeviceInfo(device_id="device-001", last_event_at=datetime(2026, 1, 15, 10, 30, 0)),
-                DeviceInfo(device_id="device-002", last_event_at=datetime(2026, 1, 15, 10, 31, 0)),
+                DeviceInfo(
+                    device_id="device-001",
+                    last_event_at=datetime(2026, 1, 15, 10, 30, 0),
+                ),
+                DeviceInfo(
+                    device_id="device-002",
+                    last_event_at=datetime(2026, 1, 15, 10, 31, 0),
+                ),
             ],
             total=100,
             limit=50,
@@ -63,7 +71,7 @@ class TestDeviceService:
 
         async def execute_side_effect(*args, **kwargs):
             query_str = str(args[0])
-            if 'count' in query_str.lower():
+            if "count" in query_str.lower():
                 return mock_count_result
             return mock_query_result
 
@@ -95,7 +103,7 @@ class TestDeviceService:
 
         async def execute_side_effect(*args, **kwargs):
             query_str = str(args[0])
-            if 'count' in query_str.lower():
+            if "count" in query_str.lower():
                 return mock_count_result
             return mock_query_result
 
@@ -123,7 +131,7 @@ class TestDeviceService:
 
         async def execute_side_effect(*args, **kwargs):
             query_str = str(args[0])
-            if 'count' in query_str.lower():
+            if "count" in query_str.lower():
                 return mock_count_result
             return mock_query_result
 
@@ -160,8 +168,7 @@ class TestDeviceService:
         mock_session.execute.return_value = mock_result
 
         count = await DeviceService.get_device_count(
-            mock_session,
-            since=datetime(2026, 1, 1, 0, 0, 0)
+            mock_session, since=datetime(2026, 1, 1, 0, 0, 0)
         )
 
         assert count == 50

@@ -1,10 +1,12 @@
 """Health API route - handles deep healthcheck."""
+
 import logging
+
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
-from src.models.database import check_database_connection
 from src.api.schemas.common import HealthResponse
+from src.models.database import check_database_connection
 
 router = APIRouter(prefix="/health", tags=["health"])
 logger = logging.getLogger(__name__)

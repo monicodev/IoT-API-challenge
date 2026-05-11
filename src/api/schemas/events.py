@@ -1,12 +1,13 @@
 """Event-related Pydantic schemas."""
+
 from datetime import datetime
-from typing import List
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class EventCreate(BaseModel):
     """Schema for creating a single telemetry event."""
+
     device_id: str = Field(..., max_length=255, description="Unique device identifier")
     timestamp: datetime = Field(..., description="Event timestamp in ISO 8601 format")
     metric: str = Field(..., max_length=100, description="Metric name")
@@ -31,11 +32,12 @@ class EventCreate(BaseModel):
 
 class EventBatchRequest(BaseModel):
     """Schema for batch event ingestion."""
-    events: List[EventCreate] = Field(..., min_length=1, max_length=1000)
+
+    events: list[EventCreate] = Field(..., min_length=1, max_length=1000)
 
     @field_validator("events")
     @classmethod
-    def validate_events_not_empty(cls, v: List[EventCreate]) -> List[EventCreate]:
+    def validate_events_not_empty(cls, v: list[EventCreate]) -> list[EventCreate]:
         if not v:
             raise ValueError("events list cannot be empty")
         return v
@@ -43,5 +45,6 @@ class EventBatchRequest(BaseModel):
 
 class EventInsertResponse(BaseModel):
     """Response for event insertion."""
+
     inserted: int = Field(..., description="Number of events inserted")
     duplicates: int = Field(..., description="Number of duplicate events skipped")

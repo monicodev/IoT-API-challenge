@@ -1,21 +1,27 @@
 """Devices API route - handles device registry."""
-from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.database import get_db
 from src.api.schemas.devices import DeviceListResponse
+from src.models.database import get_db
 from src.services.device_service import DeviceService
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
+DEFAULT_LIMIT: int = 50
+
 
 @router.get("", response_model=DeviceListResponse)
 async def list_devices(
-    since: Optional[datetime] = Query(None, description="Filter devices active since this time"),
-    limit: int = Query(50, ge=1, le=1000, description="Maximum number of devices to return"),
+    since: datetime | None = Query(
+        None, description="Filter devices active since this time"
+    ),
+    limit: int = Query(
+        DEFAULT_LIMIT, ge=1, le=1000, description="Maximum number of devices to return"
+    ),
     offset: int = Query(0, ge=0, description="Number of devices to skip"),
     session: AsyncSession = Depends(get_db),
 ) -> DeviceListResponse:
