@@ -33,6 +33,11 @@ class Settings(BaseSettings):
         )
 
 
+def get_db_url() -> str:
+    """Get database URL from environment at call time."""
+    return Settings().get_database_url()
+
+
 settings = Settings()
 
 # Async engine with NullPool for serverless/short-lived connections
@@ -61,19 +66,25 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def check_database_connection(timeout: float = 5.0) -> tuple[bool, str]:
+async def check_database_connection(
+    url: str | None = None, timeout: float = 5.0
+) -> tuple[bool, str]:
     """
     Check database connectivity with timeout.
 
     Args:
+        url: Optional database URL. Uses settings if not provided.
         timeout: Maximum seconds to wait for connection check.
 
     Returns:
         Tuple of (is_connected, error_message)
     """
+    check_url = url or _engine_url
     try:
-        async with engine.connect() as conn:
+        temp_engine = create_async_engine(check_url, echo=False, poolclass=NullPool)
+        async with temp_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
+        await temp_engine.dispose()
         return True, ""
     except Exception as e:
         return False, str(e)

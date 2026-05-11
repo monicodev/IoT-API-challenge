@@ -1,6 +1,7 @@
 """Health API route - handles deep healthcheck."""
 
 import logging
+import os
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
@@ -19,7 +20,8 @@ async def health_check() -> JSONResponse:
 
     Returns 200 if database is reachable, 503 if not.
     """
-    is_connected, error = await check_database_connection()
+    db_url = os.environ.get("DATABASE_URL")
+    is_connected, error = await check_database_connection(url=db_url)
 
     if is_connected:
         return JSONResponse(

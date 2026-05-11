@@ -90,10 +90,7 @@ jobs:
 
       - name: Run tests with coverage
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/iot_telemetry_test
           SKIP_WARMUP: "true"
         run: pytest --cov=src --cov-report=term-missing --cov-report=xml
 
