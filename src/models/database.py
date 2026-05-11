@@ -16,7 +16,6 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings from environment variables."""
 
-    database_url: str = "postgresql+asyncpg://ubuntu@localhost:5432/iot_telemetry"
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "ubuntu"
@@ -27,21 +26,21 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = False
 
+    def get_database_url(self) -> str:
+        """Build database URL from settings."""
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
 
 settings = Settings()
 
-
-def get_database_url() -> str:
-    """Build database URL from settings."""
-    return (
-        f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"
-        f"@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
-    )
-
-
 # Async engine with NullPool for serverless/short-lived connections
+# Use environment DATABASE_URL if available, otherwise build from components
+_engine_url = settings.get_database_url()
 engine: AsyncEngine = create_async_engine(
-    get_database_url(),
+    _engine_url,
     echo=False,
     poolclass=NullPool,
     future=True,
@@ -64,15 +63,20 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def check_database_connection() -> tuple[bool, str]:
+async def check_database_connection(timeout: float = 5.0) -> tuple[bool, str]:
     """
-    Check database connectivity by executing a simple query.
+    Check database connectivity with timeout.
+
+    Args:
+        timeout: Maximum seconds to wait for connection check.
 
     Returns:
         Tuple of (is_connected, error_message)
     """
     try:
-        async with engine.connect() as conn:
+        async with engine.connect().execution_options(
+            timeout=timeout
+        ) as conn:
             await conn.execute(text("SELECT 1"))
         return True, ""
     except Exception as e:

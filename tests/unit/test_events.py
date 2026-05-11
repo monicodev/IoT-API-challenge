@@ -175,7 +175,7 @@ class TestEventService:
         """Test successful batch insertion."""
         mock_session = AsyncMock()
         mock_result = AsyncMock()
-        mock_result.fetchall.return_value = [("uuid-1",), ("uuid-2",)]
+        mock_result.fetchall.return_value = [("uuid-1",), ("uuid-2")]
         mock_session.execute.return_value = mock_result
 
         events = [
@@ -198,3 +198,73 @@ class TestEventService:
         assert inserted == 2
         assert duplicates == 0
         mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_insert_batch_mixed_new_and_duplicate(self):
+        """Test batch insertion with mixed new and duplicate events.
+        
+        CRITICAL: This verifies idempotency - when 1 of 3 events is a duplicate,
+        the other 2 should still be inserted successfully.
+        """
+        mock_session = AsyncMock()
+        mock_result = AsyncMock()
+        # Simulate: 2 new inserted, 1 duplicate skipped
+        mock_result.fetchall.return_value = [("uuid-1",), ("uuid-2")]
+        mock_session.execute.return_value = mock_result
+
+        # 3 events total: 2 new, 1 duplicate (same as first)
+        events = [
+            EventCreate(
+                device_id="device-001",
+                timestamp=datetime(2026, 1, 15, 10, 30, 0),
+                metric="temperature",
+                value=23.5,
+            ),
+            EventCreate(
+                device_id="device-001",
+                timestamp=datetime(2026, 1, 15, 10, 31, 0),
+                metric="temperature",
+                value=23.7,
+            ),
+            EventCreate(
+                device_id="device-001",
+                timestamp=datetime(2026, 1, 15, 10, 30, 0),  # Duplicate!
+                metric="temperature",
+                value=23.5,
+            ),
+        ]
+
+        inserted, duplicates = await EventService.insert_events_batch(mock_session, events)
+
+        # 2 inserted, 1 duplicate
+        assert inserted == 2
+        assert duplicates == 1
+        mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_insert_batch_all_duplicates(self):
+        """Test batch where all events are duplicates."""
+        mock_session = AsyncMock()
+        mock_result = AsyncMock()
+        mock_result.fetchall.return_value = []  # All duplicates
+        mock_session.execute.return_value = mock_result
+
+        events = [
+            EventCreate(
+                device_id="device-001",
+                timestamp=datetime(2026, 1, 15, 10, 30, 0),
+                metric="temperature",
+                value=23.5,
+            ),
+            EventCreate(
+                device_id="device-001",
+                timestamp=datetime(2026, 1, 15, 10, 31, 0),
+                metric="temperature",
+                value=23.7,
+            ),
+        ]
+
+        inserted, duplicates = await EventService.insert_events_batch(mock_session, events)
+
+        assert inserted == 0
+        assert duplicates == 2

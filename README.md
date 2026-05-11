@@ -223,3 +223,81 @@ This approach is:
 - **Async I/O**: All database operations use async/await
 - **Connection Pooling**: NullPool used for serverless, configure for production
 - **Index-Only Scans**: Composite indexes cover common query patterns
+
+## Future Improvements
+
+For production at scale, these enhancements would be added:
+
+### 1. Redis Caching for Aggregates
+```python
+# Cache aggregation results in Redis with TTL
+# Typical cache hit rate: 80-95% for dashboard queries
+REDIS_CACHE_TTL = 300  # 5 minutes
+
+# Cache invalidation on new event ingestion
+# Use Redis pub/sub for multi-instance invalidation
+```
+
+### 2. Message Broker for Ingestion
+```python
+# Instead of direct INSERT, use RabbitMQ/Kafka
+# Producers: IoT devices -> Message Queue -> Worker Pool -> PostgreSQL
+
+# Benefits:
+# - Decouple ingestion from write latency
+# - Handle traffic spikes gracefully
+# - Enable replay/reprocess capability
+# - Scale workers independently
+```
+
+### 3. Connection Pooling (Production)
+```python
+# Replace NullPool with QueuePool
+engine = create_async_engine(
+    url,
+    pool_size=20,
+    max_overflow=40,
+    pool_recycle=3600,
+)
+```
+
+### 4. Read Replicas for Queries
+```python
+# Route GET requests to read replicas
+# Route writes to primary
+# Use PgBouncer for connection pooling
+```
+
+### 5. TimescaleDB Migration (At Scale)
+When reaching 100M+ rows:
+```sql
+-- Convert to hypertable
+SELECT create_hypertable('telemetry_events', 'timestamp');
+
+-- Enable compression
+ALTER TABLE telemetry_events SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'device_id, metric'
+);
+
+-- Use continuous aggregates
+CREATE MATERIALIZED VIEW hourly_metrics
+WITH (timescaledb.continuous) AS
+SELECT device_id, metric,
+       time_bucket('1h', timestamp) AS bucket,
+       AVG(value), MIN(value), MAX(value)
+FROM telemetry_events
+GROUP BY device_id, metric, bucket;
+```
+
+### 6. Monitoring & Observability
+```python
+# Add Prometheus metrics
+- ingestion_latency_seconds
+- batch_size_distribution
+- aggregation_query_duration
+- active_devices_count
+
+# Add OpenTelemetry tracing
+# Distributed traces through the full request path
+```

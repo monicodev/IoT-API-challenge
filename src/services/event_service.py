@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Tuple
 
-from sqlalchemy import select, insert
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.event import TelemetryEvent
@@ -13,7 +13,10 @@ class EventService:
     """Service for handling telemetry event operations."""
 
     @staticmethod
-    async def insert_event(session: AsyncSession, event: EventCreate) -> Tuple[int, int]:
+    async def insert_event(
+        session: AsyncSession,
+        event: EventCreate,
+    ) -> Tuple[int, int]:
         """
         Insert a single telemetry event.
 
@@ -32,14 +35,15 @@ class EventService:
         ).returning(TelemetryEvent.id)
 
         result = await session.execute(stmt)
-        inserted = len(result.fetchall())
-        await session.commit()
-        return inserted, 1 - inserted  # If inserted=1, duplicates=0
+        inserted = len(result.all())
+        duplicates = 1 - inserted
+
+        return inserted, duplicates
 
     @staticmethod
     async def insert_events_batch(
         session: AsyncSession,
-        events: List[EventCreate]
+        events: List[EventCreate],
     ) -> Tuple[int, int]:
         """
         Insert multiple telemetry events in batch.
@@ -52,8 +56,7 @@ class EventService:
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        # Prepare values for bulk insert
-        values = [
+        values: List[dict[str, object]] = [
             {
                 "device_id": e.device_id,
                 "timestamp": e.timestamp,
@@ -63,17 +66,13 @@ class EventService:
             for e in events
         ]
 
-        # Execute bulk insert with ON CONFLICT DO NOTHING
         stmt = pg_insert(TelemetryEvent).values(values).on_conflict_do_nothing(
             constraint="uq_events_device_timestamp_metric"
         ).returning(TelemetryEvent.id)
 
         result = await session.execute(stmt)
-
-        inserted = len(result.fetchall())
+        inserted = len(result.all())
         duplicates = len(events) - inserted
-
-        await session.commit()
 
         return inserted, duplicates
 
@@ -82,14 +81,14 @@ class EventService:
         session: AsyncSession,
         device_id: str,
         from_time: datetime,
-        to: datetime
+        to: datetime,
     ) -> int:
         """Count events for a device within a time range."""
         result = await session.execute(
-            select(TelemetryEvent).where(
+            select(func.count()).select_from(TelemetryEvent).where(
                 TelemetryEvent.device_id == device_id,
                 TelemetryEvent.timestamp >= from_time,
                 TelemetryEvent.timestamp <= to,
             )
         )
-        return len(result.fetchall())
+        return result.scalar() or 0

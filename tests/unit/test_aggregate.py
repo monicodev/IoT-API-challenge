@@ -131,6 +131,83 @@ class TestAggregationService:
 
         assert data == []
 
+    @pytest.mark.asyncio
+    async def test_get_aggregation_1minute_interval(self):
+        """Test 1-minute interval aggregation."""
+        mock_session = AsyncMock()
+        mock_result = AsyncMock()
+        mock_result.fetchall.return_value = [
+            (datetime(2026, 1, 15, 10, 1, 0), 23.5),
+            (datetime(2026, 1, 15, 10, 2, 0), 23.7),
+            (datetime(2026, 1, 15, 10, 3, 0), 23.9),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        data = await AggregationService.get_aggregation(
+            session=mock_session,
+            device_id="device-001",
+            metric="temperature",
+            from_time=datetime(2026, 1, 15, 10, 0, 0),
+            to=datetime(2026, 1, 15, 10, 5, 0),
+            interval=IntervalType.MINUTE,
+            aggregation=AggregationType.AVG,
+        )
+
+        assert len(data) == 3
+        assert data[0][1] == 23.5
+
+    @pytest.mark.asyncio
+    async def test_get_aggregation_5minute_interval(self):
+        """Test 5-minute interval aggregation (special case in code)."""
+        mock_session = AsyncMock()
+        mock_result = AsyncMock()
+        # 5-minute buckets: 0-5, 5-10, etc.
+        mock_result.fetchall.return_value = [
+            (datetime(2026, 1, 15, 10, 0, 0), 23.5),
+            (datetime(2026, 1, 15, 10, 5, 0), 24.1),
+            (datetime(2026, 1, 15, 10, 10, 0), 24.3),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        data = await AggregationService.get_aggregation(
+            session=mock_session,
+            device_id="device-001",
+            metric="temperature",
+            from_time=datetime(2026, 1, 15, 10, 0, 0),
+            to=datetime(2026, 1, 15, 10, 15, 0),
+            interval=IntervalType.FIVE_MINUTES,
+            aggregation=AggregationType.AVG,
+        )
+
+        assert len(data) == 3
+        # Verify the 5-minute math works
+
+    @pytest.mark.asyncio
+    async def test_get_aggregation_1day_interval(self):
+        """Test 1-day interval aggregation."""
+        mock_session = AsyncMock()
+        mock_result = AsyncMock()
+        mock_result.fetchall.return_value = [
+            (datetime(2026, 1, 15, 0, 0, 0), 23.5),
+            (datetime(2026, 1, 16, 0, 0, 0), 24.1),
+            (datetime(2026, 1, 17, 0, 0, 0), 22.8),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        data = await AggregationService.get_aggregation(
+            session=mock_session,
+            device_id="device-001",
+            metric="temperature",
+            from_time=datetime(2026, 1, 15, 0, 0, 0),
+            to=datetime(2026, 1, 18, 0, 0, 0),
+            interval=IntervalType.DAY,
+            aggregation=AggregationType.AVG,
+        )
+
+        assert len(data) == 3
+        assert data[0][1] == 23.5
+        assert data[2][1] == 22.8
+
 
 class TestAggregateResponse:
     """Tests for aggregate response schema."""

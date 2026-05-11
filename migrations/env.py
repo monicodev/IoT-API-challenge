@@ -1,5 +1,6 @@
 """Alembic environment configuration."""
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -10,21 +11,38 @@ from alembic import context
 import sys
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models.base import Base
 from src.models.event import TelemetryEvent
 
-# this is the Alembic Config object
 config = context.config
 
-# Interpret the config file for Python logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Model metadata for autogenerate support
 target_metadata = Base.metadata
+
+
+def get_database_url_from_env() -> str:
+    """
+    Build database URL from environment variables.
+
+    Priority:
+    1. DATABASE_URL (complete URL)
+    2. Individual POSTGRES_* components
+    """
+    if os.environ.get("DATABASE_URL"):
+        return os.environ["DATABASE_URL"]
+
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    user = os.environ.get("POSTGRES_USER", "postgres")
+    password = os.environ.get("POSTGRES_PASSWORD", "")
+    db = os.environ.get("POSTGRES_DB", "iot_telemetry")
+
+    auth = f"{user}:{password}@" if password else f"{user}@"
+    return f"postgresql+asyncpg://{auth}{host}:{port}/{db}"
 
 
 def run_migrations_offline() -> None:
@@ -51,12 +69,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
-    # Get the URL from the config - try different key names
-    url = config.get_main_option("sqlalchemy.url") or config.get_main_option("url")
+    url = config.get_main_option("sqlalchemy.url")
 
-    if not url:
-        # Fallback to hardcoded URL for this environment
-        url = "postgresql+asyncpg://ubuntu@localhost:5432/iot_telemetry"
+    if not url or url == "driver://user:pass@localhost/dbname":
+        url = get_database_url_from_env()
 
     connectable = async_engine_from_config(
         {"sqlalchemy.url": url},

@@ -2,7 +2,7 @@
 
 Revision ID: 001
 Revises:
-Create Date: 2026-01-15
+Create Date: 2026-05-10
 """
 from typing import Sequence, Union
 
@@ -37,8 +37,12 @@ def upgrade() -> None:
         ['device_id', 'timestamp', 'metric']
     )
 
-    # Indexes for efficient queries
-    op.create_index('idx_events_device_timestamp', 'telemetry_events', ['device_id', sa.text('timestamp DESC')])
+    # Indexes for efficient queries - use PostgreSQL functional index syntax
+    # DESC NULLS LAST requires expression syntax, not plain column names
+    op.execute("""
+        CREATE INDEX idx_events_device_timestamp 
+        ON telemetry_events (device_id, (timestamp) DESC NULLS LAST)
+    """)
     op.create_index('idx_events_device_metric', 'telemetry_events', ['device_id', 'metric'])
     op.create_index('ix_telemetry_events_device_id', 'telemetry_events', ['device_id'])
     op.create_index('ix_telemetry_events_timestamp', 'telemetry_events', ['timestamp'])

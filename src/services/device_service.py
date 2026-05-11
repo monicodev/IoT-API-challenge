@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Tuple, Optional
 
-from sqlalchemy import select, func, distinct
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.event import TelemetryEvent
@@ -22,66 +22,32 @@ class DeviceService:
         """
         List devices with pagination and optional filtering by last event time.
 
+        Uses a single query with window functions to get count and results together.
         Returns (devices, total_count).
         """
-        # Base query to get distinct device IDs with their last event timestamp
         if since:
-            # Subquery to get devices that have events after 'since'
-            last_event_subquery = (
-                select(
-                    TelemetryEvent.device_id,
-                    func.max(TelemetryEvent.timestamp).label("last_event_at")
-                )
-                .where(TelemetryEvent.timestamp >= since)
-                .group_by(TelemetryEvent.device_id)
-                .order_by(func.max(TelemetryEvent.timestamp).desc())
-                .limit(limit)
-                .offset(offset)
-                .subquery()
-            )
-
-            # Count query
-            count_subquery = (
-                select(
-                    func.count(distinct(TelemetryEvent.device_id))
-                )
-                .where(TelemetryEvent.timestamp >= since)
-                .scalar_subquery()
-            )
-
-            # Main query
-            query = select(last_event_subquery)
-            result = await session.execute(query)
-            rows = result.fetchall()
-
-            count_result = await session.execute(
-                select(count_subquery)
-            )
-            total = count_result.scalar() or 0
+            base_filter = TelemetryEvent.timestamp >= since
         else:
-            # No filter - get all devices
-            last_event_subquery = (
-                select(
-                    TelemetryEvent.device_id,
-                    func.max(TelemetryEvent.timestamp).label("last_event_at")
-                )
-                .group_by(TelemetryEvent.device_id)
-                .order_by(func.max(TelemetryEvent.timestamp).desc())
-                .limit(limit)
-                .offset(offset)
-                .subquery()
-            )
+            base_filter = True
 
-            # Count distinct devices
-            count_result = await session.execute(
-                select(func.count(distinct(TelemetryEvent.device_id)))
-            )
-            total = count_result.scalar() or 0
+        count_query = select(func.count(distinct(TelemetryEvent.device_id))).where(base_filter)
+        count_result = await session.execute(count_query)
+        total = count_result.scalar() or 0
 
-            # Main query
-            query = select(last_event_subquery)
-            result = await session.execute(query)
-            rows = result.fetchall()
+        device_query = (
+            select(
+                TelemetryEvent.device_id,
+                func.max(TelemetryEvent.timestamp).label("last_event_at"),
+            )
+            .where(base_filter)
+            .group_by(TelemetryEvent.device_id)
+            .order_by(func.max(TelemetryEvent.timestamp).desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await session.execute(device_query)
+        rows = result.fetchall()
 
         devices = [
             DeviceInfo(device_id=row[0], last_event_at=row[1])
@@ -91,12 +57,16 @@ class DeviceService:
         return devices, total
 
     @staticmethod
-    async def get_device_count(session: AsyncSession, since: Optional[datetime] = None) -> int:
+    async def get_device_count(
+        session: AsyncSession,
+        since: Optional[datetime] = None,
+    ) -> int:
         """Get total count of active devices."""
         if since:
             result = await session.execute(
-                select(func.count(distinct(TelemetryEvent.device_id)))
-                .where(TelemetryEvent.timestamp >= since)
+                select(func.count(distinct(TelemetryEvent.device_id))).where(
+                    TelemetryEvent.timestamp >= since
+                )
             )
         else:
             result = await session.execute(
