@@ -40,9 +40,9 @@ def _get_connection_params() -> tuple[str, dict]:
             }
 
     host = os.environ.get("POSTGRES_HOST", "localhost")
-    port = os.environ.get("POSTGRES_PORT", "5433")
-    user = os.environ.get("POSTGRES_USER", "postgres")
-    password = os.environ.get("POSTGRES_PASSWORD", "postgres")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    user = os.environ.get("POSTGRES_USER", "ubuntu")
+    password = os.environ.get("POSTGRES_PASSWORD", "")
 
     return (
         f"postgresql+asyncpg://{user}:{password}@{host}:{port}/iot_telemetry_test",
