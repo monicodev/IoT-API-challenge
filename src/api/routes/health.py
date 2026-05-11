@@ -1,4 +1,5 @@
 """Health API route - handles deep healthcheck."""
+import logging
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
@@ -6,6 +7,7 @@ from src.models.database import check_database_connection
 from src.api.schemas.common import HealthResponse
 
 router = APIRouter(prefix="/health", tags=["health"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=HealthResponse)
@@ -26,6 +28,7 @@ async def health_check() -> JSONResponse:
             ).model_dump(),
         )
     else:
+        logger.warning(f"[health] Database check failed: {error}")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content=HealthResponse(

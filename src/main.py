@@ -10,9 +10,7 @@ from src.api.routes import events, aggregate, devices, health
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
-    # Startup: nothing needed - migrations run via docker-compose
     yield
-    # Shutdown: dispose engine connections
     await engine.dispose()
 
 
@@ -23,7 +21,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,7 +29,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers
 app.include_router(health.router)
 app.include_router(events.router)
 app.include_router(aggregate.router)

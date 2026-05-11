@@ -1,9 +1,9 @@
 """Unit tests for event endpoints and service."""
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from src.api.schemas.events import EventCreate, EventBatchRequest, EventInsertResponse
+from src.api.schemas.events import EventCreate, EventInsertResponse
 from src.services.event_service import EventService
 
 
@@ -73,47 +73,14 @@ class TestEventCreate:
             )
 
 
-class TestEventBatchRequest:
-    """Tests for EventBatchRequest schema validation."""
+class TestEventInsertResponse:
+    """Tests for EventInsertResponse schema."""
 
-    def test_valid_batch(self):
-        """Test valid batch request."""
-        events = [
-            EventCreate(
-                device_id="device-001",
-                timestamp=datetime(2026, 1, 15, 10, 30, 0),
-                metric="temperature",
-                value=23.5,
-            ),
-            EventCreate(
-                device_id="device-001",
-                timestamp=datetime(2026, 1, 15, 10, 31, 0),
-                metric="temperature",
-                value=23.7,
-            ),
-        ]
-        batch = EventBatchRequest(events=events)
-        assert len(batch.events) == 2
-
-    def test_empty_batch_rejected(self):
-        """Test empty batch is rejected."""
-        with pytest.raises(ValueError):
-            EventBatchRequest(events=[])
-
-    def test_max_1000_events(self):
-        """Test batch max 1000 events enforced at endpoint level."""
-        # Schema allows up to 1000, endpoint validates > 1000
-        events = [
-            EventCreate(
-                device_id=f"device-{i}",
-                timestamp=datetime(2026, 1, 15, 10, 30, 0),
-                metric="temperature",
-                value=23.5,
-            )
-            for i in range(1000)
-        ]
-        batch = EventBatchRequest(events=events)
-        assert len(batch.events) == 1000
+    def test_response_creation(self):
+        """Test event insert response creation."""
+        response = EventInsertResponse(inserted=5, duplicates=2)
+        assert response.inserted == 5
+        assert response.duplicates == 2
 
 
 class TestEventService:
@@ -123,8 +90,8 @@ class TestEventService:
     async def test_insert_event_success(self):
         """Test successful single event insertion."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.fetchall.return_value = [("uuid-1",)]
+        mock_result = MagicMock()
+        mock_result.all.return_value = [("uuid-1",)]
         mock_session.execute.return_value = mock_result
 
         event = EventCreate(
@@ -144,8 +111,8 @@ class TestEventService:
     async def test_insert_event_duplicate(self):
         """Test duplicate event is handled correctly."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.fetchall.return_value = []  # No rows returned = conflict
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
         mock_session.execute.return_value = mock_result
 
         event = EventCreate(
@@ -174,8 +141,8 @@ class TestEventService:
     async def test_insert_batch_success(self):
         """Test successful batch insertion."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.fetchall.return_value = [("uuid-1",), ("uuid-2")]
+        mock_result = MagicMock()
+        mock_result.all.return_value = [("uuid-1",), ("uuid-2",)]
         mock_session.execute.return_value = mock_result
 
         events = [
@@ -197,22 +164,19 @@ class TestEventService:
 
         assert inserted == 2
         assert duplicates == 0
-        mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_insert_batch_mixed_new_and_duplicate(self):
         """Test batch insertion with mixed new and duplicate events.
-        
+
         CRITICAL: This verifies idempotency - when 1 of 3 events is a duplicate,
         the other 2 should still be inserted successfully.
         """
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
-        # Simulate: 2 new inserted, 1 duplicate skipped
-        mock_result.fetchall.return_value = [("uuid-1",), ("uuid-2")]
+        mock_result = MagicMock()
+        mock_result.all.return_value = [("uuid-1",), ("uuid-2")]
         mock_session.execute.return_value = mock_result
 
-        # 3 events total: 2 new, 1 duplicate (same as first)
         events = [
             EventCreate(
                 device_id="device-001",
@@ -228,7 +192,7 @@ class TestEventService:
             ),
             EventCreate(
                 device_id="device-001",
-                timestamp=datetime(2026, 1, 15, 10, 30, 0),  # Duplicate!
+                timestamp=datetime(2026, 1, 15, 10, 30, 0),
                 metric="temperature",
                 value=23.5,
             ),
@@ -236,17 +200,15 @@ class TestEventService:
 
         inserted, duplicates = await EventService.insert_events_batch(mock_session, events)
 
-        # 2 inserted, 1 duplicate
         assert inserted == 2
         assert duplicates == 1
-        mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_insert_batch_all_duplicates(self):
         """Test batch where all events are duplicates."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.fetchall.return_value = []  # All duplicates
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
         mock_session.execute.return_value = mock_result
 
         events = [

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -22,9 +23,10 @@ class Settings(BaseSettings):
     postgres_password: str = ""
     postgres_db: str = "iot_telemetry"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+    )
 
     def get_database_url(self) -> str:
         """Build database URL from settings."""
@@ -37,7 +39,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Async engine with NullPool for serverless/short-lived connections
-# Use environment DATABASE_URL if available, otherwise build from components
 _engine_url = settings.get_database_url()
 engine: AsyncEngine = create_async_engine(
     _engine_url,
@@ -74,9 +75,7 @@ async def check_database_connection(timeout: float = 5.0) -> tuple[bool, str]:
         Tuple of (is_connected, error_message)
     """
     try:
-        async with engine.connect().execution_options(
-            timeout=timeout
-        ) as conn:
+        async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         return True, ""
     except Exception as e:

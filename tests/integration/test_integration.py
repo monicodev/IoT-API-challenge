@@ -1,95 +1,125 @@
 """Integration tests using real PostgreSQL database."""
+import os
 import pytest
 import asyncio
-from datetime import datetime, timedelta
 from typing import AsyncGenerator
 
 import asyncpg
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from httpx import AsyncClient, ASGITransport
 
 from src.models.base import Base
 from src.models.event import TelemetryEvent
-from src.models.database import get_database_url
 from src.main import app
-from src.api.schemas.events import EventCreate
 
 
-# Use a test database
-TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5433/iot_telemetry_test"
+def _get_connection_params() -> tuple[str, dict]:
+    """Parse connection params from DATABASE_URL or env vars."""
+    db_name_suffix = "_test"
 
+    if os.environ.get("DATABASE_URL"):
+        raw_url = os.environ["DATABASE_URL"]
+        if "://" in raw_url:
+            proto, rest = raw_url.split("://", 1)
+            auth, host_part = rest.split("@", 1)
+            user, password = auth.split(":", 1)
+            host_port, path_part = host_part.rsplit("/", 1)
+            if ":" in host_port:
+                host, port = host_port.split(":")
+            else:
+                host = host_port
+                port = "5432"
+            test_db_url = f"{proto}://{auth}@{host_port}/{path_part.rsplit('/', 1)[0]}{db_name_suffix}"
+            return test_db_url, {"host": host, "port": int(port), "user": user, "password": password}
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for async tests."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT", "5433")
+    user = os.environ.get("POSTGRES_USER", "postgres")
+    password = os.environ.get("POSTGRES_PASSWORD", "postgres")
+
+    return (
+        f"postgresql+asyncpg://{user}:{password}@{host}:{port}/iot_telemetry_test",
+        {"host": host, "port": int(port), "user": user, "password": password},
+    )
 
 
 @pytest.fixture(scope="session")
 async def setup_database():
     """Setup test database and tables."""
-    # Connect to PostgreSQL to create test database
-    conn = await asyncpg.connect(
-        host="localhost",
-        port=5433,
-        user="postgres",
-        password="postgres",
+    test_db_url, pg_params = _get_connection_params()
+
+    try:
+        conn = await asyncpg.connect(database="postgres", **pg_params)
+        db_name = test_db_url.rsplit("/", 1)[-1]
+        try:
+            await conn.execute(f'CREATE DATABASE {db_name}')
+        except asyncpg.exceptions.DuplicateDatabaseError:
+            pass
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"[test] Could not create test database: {e}")
+
+    engine = create_async_engine(
+        test_db_url,
+        echo=False,
+        poolclass=NullPool,
     )
 
-    # Create test database if not exists
-    try:
-        await conn.execute("CREATE DATABASE iot_telemetry_test")
-    except asyncpg.exceptions.DuplicateDatabaseError:
-        pass
-    await conn.close()
-
-    # Create tables
-    engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
-
     await engine.dispose()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 async def db_session(setup_database) -> AsyncGenerator[AsyncSession, None]:
-    """Provide database session for tests."""
+    """Provide database session for tests with function scope."""
     engine = setup_database
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with async_session() as session:
-        yield session
-
-
-@pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Provide HTTP client for API tests."""
-    # Override database URL to use test database
-    from src.models import database
-    original_url = database.settings.database_url
-    database.settings.database_url = TEST_DB_URL
-
-    # Recreate engine with test database
-    database.engine = create_async_engine(TEST_DB_URL, echo=False)
-    database.async_session_factory = sessionmaker(
-        database.engine,
+    async_session_factory = sessionmaker(
+        engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    async with async_session_factory() as session:
+        yield session
 
-    # Restore original settings
-    database.settings.database_url = original_url
-    await database.engine.dispose()
+
+@pytest.fixture(scope="function")
+async def client() -> AsyncGenerator[AsyncClient, None]:
+    """Provide HTTP client for API tests with function scope."""
+    from src.models import database as db_module
+
+    test_db_url, _ = _get_connection_params()
+
+    engine = create_async_engine(
+        test_db_url,
+        echo=False,
+        poolclass=NullPool,
+    )
+    async_session_factory = sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def override_get_db():
+        async with async_session_factory() as session:
+            yield session
+
+    app.dependency_overrides[db_module.get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+    await engine.dispose()
 
 
 class TestEventsIntegration:
@@ -112,7 +142,6 @@ class TestEventsIntegration:
         assert data["inserted"] == 1
         assert data["duplicates"] == 0
 
-        # Verify event was stored
         from sqlalchemy import select
         result = await db_session.execute(
             select(TelemetryEvent).where(
@@ -120,37 +149,20 @@ class TestEventsIntegration:
                 TelemetryEvent.metric == "temperature",
             )
         )
-        events = result.fetchall()
+        events = result.scalars().all()
         assert len(events) == 1
-        assert events[0].value == 23.5
+        assert float(events[0].value) == 23.5
 
     @pytest.mark.asyncio
     async def test_ingest_batch_events(self, client: AsyncClient):
-        """Test ingesting batch events."""
-        events_data = {
-            "events": [
-                {
-                    "device_id": "device-002",
-                    "timestamp": "2026-01-15T10:30:00Z",
-                    "metric": "humidity",
-                    "value": 65.0,
-                },
-                {
-                    "device_id": "device-002",
-                    "timestamp": "2026-01-15T10:31:00Z",
-                    "metric": "humidity",
-                    "value": 66.0,
-                },
-                {
-                    "device_id": "device-002",
-                    "timestamp": "2026-01-15T10:32:00Z",
-                    "metric": "humidity",
-                    "value": 67.0,
-                },
-            ]
-        }
+        """Test ingesting batch events via unified /events endpoint."""
+        events_data = [
+            {"device_id": "device-002", "timestamp": "2026-01-15T10:30:00Z", "metric": "humidity", "value": 65.0},
+            {"device_id": "device-002", "timestamp": "2026-01-15T10:31:00Z", "metric": "humidity", "value": 66.0},
+            {"device_id": "device-002", "timestamp": "2026-01-15T10:32:00Z", "metric": "humidity", "value": 67.0},
+        ]
 
-        response = await client.post("/events/batch", json=events_data)
+        response = await client.post("/events", json=events_data)
 
         assert response.status_code == 201
         data = response.json()
@@ -167,12 +179,10 @@ class TestEventsIntegration:
             "value": 23.5,
         }
 
-        # First insertion
         response1 = await client.post("/events", json=event_data)
         assert response1.status_code == 201
         assert response1.json()["inserted"] == 1
 
-        # Duplicate insertion
         response2 = await client.post("/events", json=event_data)
         assert response2.status_code == 201
         data = response2.json()
@@ -181,20 +191,13 @@ class TestEventsIntegration:
 
     @pytest.mark.asyncio
     async def test_batch_size_validation(self, client: AsyncClient):
-        """Test batch size validation - max 1000."""
-        events_data = {
-            "events": [
-                {
-                    "device_id": f"device-{i}",
-                    "timestamp": "2026-01-15T10:30:00Z",
-                    "metric": "temperature",
-                    "value": 23.5,
-                }
-                for i in range(1001)
-            ]
-        }
+        """Test batch size validation - max 1000 events via unified endpoint."""
+        events_data = [
+            {"device_id": f"device-{i}", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5}
+            for i in range(1001)
+        ]
 
-        response = await client.post("/events/batch", json=events_data)
+        response = await client.post("/events", json=events_data)
 
         assert response.status_code == 400
         assert "1000" in response.json()["detail"]
@@ -205,19 +208,15 @@ class TestAggregateIntegration:
 
     @pytest.mark.asyncio
     async def test_aggregate_hourly_avg(self, client: AsyncClient):
-        """Test hourly aggregation with avg."""
-        # First insert some events
+        """Test hourly aggregation with avg using UTC datetimes."""
         events = [
-            {"events": [
-                {"device_id": "device-100", "timestamp": "2026-01-15T10:15:00Z", "metric": "temperature", "value": 20.0},
-                {"device_id": "device-100", "timestamp": "2026-01-15T10:45:00Z", "metric": "temperature", "value": 30.0},
-                {"device_id": "device-100", "timestamp": "2026-01-15T11:15:00Z", "metric": "temperature", "value": 25.0},
-                {"device_id": "device-100", "timestamp": "2026-01-15T11:45:00Z", "metric": "temperature", "value": 35.0},
-            ]}
+            {"device_id": "device-100", "timestamp": "2026-01-15T10:15:00Z", "metric": "temperature", "value": 20.0},
+            {"device_id": "device-100", "timestamp": "2026-01-15T10:45:00Z", "metric": "temperature", "value": 30.0},
+            {"device_id": "device-100", "timestamp": "2026-01-15T11:15:00Z", "metric": "temperature", "value": 25.0},
+            {"device_id": "device-100", "timestamp": "2026-01-15T11:45:00Z", "metric": "temperature", "value": 35.0},
         ]
-        await client.post("/events/batch", json=events[0])
+        await client.post("/events", json=events)
 
-        # Query aggregation
         response = await client.get(
             "/aggregate",
             params={
@@ -263,16 +262,12 @@ class TestDevicesIntegration:
     @pytest.mark.asyncio
     async def test_list_devices(self, client: AsyncClient):
         """Test listing devices."""
-        # Insert events for devices
-        events = {
-            "events": [
-                {"device_id": "device-200", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5},
-                {"device_id": "device-201", "timestamp": "2026-01-15T10:31:00Z", "metric": "temperature", "value": 24.0},
-            ]
-        }
-        await client.post("/events/batch", json=events)
+        events = [
+            {"device_id": "device-200", "timestamp": "2026-01-15T10:30:00Z", "metric": "temperature", "value": 23.5},
+            {"device_id": "device-201", "timestamp": "2026-01-15T10:31:00Z", "metric": "temperature", "value": 24.0},
+        ]
+        await client.post("/events", json=events)
 
-        # List devices
         response = await client.get("/devices")
 
         assert response.status_code == 200

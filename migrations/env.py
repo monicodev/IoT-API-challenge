@@ -2,9 +2,11 @@
 import asyncio
 import os
 from logging.config import fileConfig
+from typing import Optional
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
@@ -25,13 +27,7 @@ target_metadata = Base.metadata
 
 
 def get_database_url_from_env() -> str:
-    """
-    Build database URL from environment variables.
-
-    Priority:
-    1. DATABASE_URL (complete URL)
-    2. Individual POSTGRES_* components
-    """
+    """Build database URL from environment variables."""
     if os.environ.get("DATABASE_URL"):
         return os.environ["DATABASE_URL"]
 
@@ -67,23 +63,74 @@ def do_run_migrations(connection: Connection) -> None:
         context.run_migrations()
 
 
+async def run_async_migrations_with_retry(
+    url: str,
+    max_retries: int = 10,
+    retry_delay: float = 1.0,
+) -> None:
+    """Run migrations with retry logic for connection resilience."""
+    last_error: Optional[Exception] = None
+
+    for attempt in range(max_retries):
+        try:
+            print(f"[alembic] Connecting to database (attempt {attempt + 1}/{max_retries})...")
+
+            connectable = async_engine_from_config(
+                {"sqlalchemy.url": url},
+                prefix="sqlalchemy.",
+                poolclass=pool.NullPool,
+            )
+
+            async with connectable.connect() as connection:
+                await connection.run_sync(do_run_migrations)
+
+            await connectable.dispose()
+            print("[alembic] Migrations completed successfully")
+            return
+
+        except OperationalError as e:
+            last_error = e
+            err_str = str(e).lower()
+
+            if "gaierror" in err_str or "name resolution" in err_str:
+                print(f"[alembic] DNS resolution failed: {e}")
+            elif "connection refused" in err_str:
+                print(f"[alembic] Connection refused: {e}")
+            elif "could not connect" in err_str:
+                print(f"[alembic] Could not connect: {e}")
+            else:
+                print(f"[alembic] Operational error: {e}")
+
+        except OSError as e:
+            last_error = e
+            print(f"[alembic] OS error (possibly DNS): {e}")
+
+        except Exception as e:
+            last_error = e
+            print(f"[alembic] Unexpected error: {type(e).__name__} - {e}")
+
+        if attempt < max_retries - 1:
+            sleep_time = retry_delay * (2 ** attempt)
+            print(f"[alembic] Retrying in {sleep_time:.1f}s...")
+            await asyncio.sleep(sleep_time)
+
+    raise RuntimeError(
+        f"[alembic] Failed to run migrations after {max_retries} attempts. "
+        f"Last error: {last_error}"
+    )
+
+
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
     url = config.get_main_option("sqlalchemy.url")
 
-    if not url or url == "driver://user:pass@localhost/dbname":
+    if not url or "driver://" in url or "localhost" in url and "your" in url:
         url = get_database_url_from_env()
 
-    connectable = async_engine_from_config(
-        {"sqlalchemy.url": url},
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    safe_url = url.replace(f"://", "://***:***@") if "@" in url else url
+    print(f"[alembic] Using database URL: {safe_url}")
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
+    await run_async_migrations_with_retry(url)
 
 
 def run_migrations_online() -> None:

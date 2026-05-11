@@ -1,7 +1,7 @@
 """Unit tests for devices endpoints and service."""
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from src.api.schemas.devices import DeviceInfo, DeviceListResponse
 from src.services.device_service import DeviceService
@@ -52,19 +52,18 @@ class TestDeviceService:
         """Test listing devices without since filter."""
         mock_session = AsyncMock()
 
-        # Mock the query results
-        mock_count_result = AsyncMock()
+        mock_count_result = MagicMock()
         mock_count_result.scalar.return_value = 10
 
-        mock_query_result = AsyncMock()
+        mock_query_result = MagicMock()
         mock_query_result.fetchall.return_value = [
             ("device-001", datetime(2026, 1, 15, 10, 30, 0)),
             ("device-002", datetime(2026, 1, 15, 10, 31, 0)),
         ]
 
-        # Setup session.execute to return different results for different queries
         async def execute_side_effect(*args, **kwargs):
-            if hasattr(args[0], 'compare') and 'count' in str(args[0]):
+            query_str = str(args[0])
+            if 'count' in query_str.lower():
                 return mock_count_result
             return mock_query_result
 
@@ -86,16 +85,17 @@ class TestDeviceService:
         """Test listing devices with since filter."""
         mock_session = AsyncMock()
 
-        mock_count_result = AsyncMock()
+        mock_count_result = MagicMock()
         mock_count_result.scalar.return_value = 5
 
-        mock_query_result = AsyncMock()
+        mock_query_result = MagicMock()
         mock_query_result.fetchall.return_value = [
             ("device-001", datetime(2026, 1, 15, 10, 30, 0)),
         ]
 
         async def execute_side_effect(*args, **kwargs):
-            if hasattr(args[0], 'compare') and 'count' in str(args[0]):
+            query_str = str(args[0])
+            if 'count' in query_str.lower():
                 return mock_count_result
             return mock_query_result
 
@@ -115,14 +115,15 @@ class TestDeviceService:
         """Test listing devices when none exist."""
         mock_session = AsyncMock()
 
-        mock_count_result = AsyncMock()
+        mock_count_result = MagicMock()
         mock_count_result.scalar.return_value = 0
 
-        mock_query_result = AsyncMock()
+        mock_query_result = MagicMock()
         mock_query_result.fetchall.return_value = []
 
         async def execute_side_effect(*args, **kwargs):
-            if hasattr(args[0], 'compare') and 'count' in str(args[0]):
+            query_str = str(args[0])
+            if 'count' in query_str.lower():
                 return mock_count_result
             return mock_query_result
 
@@ -142,7 +143,7 @@ class TestDeviceService:
     async def test_get_device_count(self):
         """Test getting device count."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar.return_value = 100
         mock_session.execute.return_value = mock_result
 
@@ -154,7 +155,7 @@ class TestDeviceService:
     async def test_get_device_count_with_filter(self):
         """Test getting device count with since filter."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar.return_value = 50
         mock_session.execute.return_value = mock_result
 

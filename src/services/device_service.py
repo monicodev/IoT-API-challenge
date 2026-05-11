@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Tuple, Optional
 
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, distinct, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.event import TelemetryEvent

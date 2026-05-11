@@ -1,7 +1,7 @@
 """Unit tests for aggregate endpoints and service."""
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from src.api.schemas.aggregate import (
     AggregationType,
@@ -42,7 +42,7 @@ class TestAggregationService:
     async def test_get_aggregation_hourly_avg(self):
         """Test hourly aggregation with avg."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = [
             (datetime(2026, 1, 15, 10, 0, 0), 23.5),
             (datetime(2026, 1, 15, 11, 0, 0), 24.1),
@@ -67,7 +67,7 @@ class TestAggregationService:
     async def test_get_aggregation_daily_max(self):
         """Test daily aggregation with max."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = [
             (datetime(2026, 1, 15, 0, 0, 0), 30.5),
             (datetime(2026, 1, 16, 0, 0, 0), 28.3),
@@ -91,7 +91,7 @@ class TestAggregationService:
     async def test_get_aggregation_count(self):
         """Test count aggregation."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = [
             (datetime(2026, 1, 15, 10, 0, 0), 150.0),
             (datetime(2026, 1, 15, 11, 0, 0), 200.0),
@@ -109,13 +109,12 @@ class TestAggregationService:
         )
 
         assert len(data) == 2
-        # COUNT returns float in our implementation
 
     @pytest.mark.asyncio
     async def test_get_aggregation_empty_result(self):
         """Test empty result when no data in range."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = []
         mock_session.execute.return_value = mock_result
 
@@ -135,7 +134,7 @@ class TestAggregationService:
     async def test_get_aggregation_1minute_interval(self):
         """Test 1-minute interval aggregation."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = [
             (datetime(2026, 1, 15, 10, 1, 0), 23.5),
             (datetime(2026, 1, 15, 10, 2, 0), 23.7),
@@ -160,8 +159,7 @@ class TestAggregationService:
     async def test_get_aggregation_5minute_interval(self):
         """Test 5-minute interval aggregation (special case in code)."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
-        # 5-minute buckets: 0-5, 5-10, etc.
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = [
             (datetime(2026, 1, 15, 10, 0, 0), 23.5),
             (datetime(2026, 1, 15, 10, 5, 0), 24.1),
@@ -180,13 +178,12 @@ class TestAggregationService:
         )
 
         assert len(data) == 3
-        # Verify the 5-minute math works
 
     @pytest.mark.asyncio
     async def test_get_aggregation_1day_interval(self):
         """Test 1-day interval aggregation."""
         mock_session = AsyncMock()
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.fetchall.return_value = [
             (datetime(2026, 1, 15, 0, 0, 0), 23.5),
             (datetime(2026, 1, 16, 0, 0, 0), 24.1),
